@@ -1,7 +1,14 @@
 .RECIPEPREFIX = >
-VPATH = intermediary_data/infinite_volume:intermediary_data/beta_interpolation:intermediary_data/continuum_extrapolation:intermediary_data/fixed_point:raw_data:assets
 
-SRC_DIR := src
+SRC_DIR  := src
+BETA_DIR := intermediary_data/beta_interpolation
+CONT_DIR := intermediary_data/continuum_extrapolation
+FIX_DIR  := intermediary_data/fixed_point
+VOL_DIR  := intermediary_data/infinite_volume
+
+# generate folder structure
+$(shell mkdir -p $(BETA_DIR) $(CONT_DIR) $(FIX_DIR) $(VOL_DIR))
+$(shell mkdir -p assets)
 
 BETAS := 920 940 960 980 100 102 104 108 110 114 120 128 136 146
 OPS   := plaq sym
@@ -22,21 +29,19 @@ PLOT_GSQ := 2.0 4.0 6.0 8.0
 PLOT_TICKS := 2.0 2.5 3.5 4.5 6.0
 
 define FIX_PT
-FIX_IN_DIR  := intermediary_data/continuum_extrapolation
-FIX_SCRIPT  := ${SRC_DIR}/fit_fixed_point.py
-FIX_INPUTS  := $(foreach G,$(FIX_GSQ),$$(FIX_IN_DIR)/$(1)_gsquared$(G)_tmin$(2)_tmax$(3)_dt$(4).json.gz)
-FIX_TARGET  := intermediary_data/fixed_point/$(1)_tmin$(2)_tmax$(3)_dt$(4).json.gz
+FIX_SCRIPT  := $(SRC_DIR)/fit_fixed_point.py
+FIX_INPUTS  := $(foreach G,$(FIX_GSQ),$(CONT_DIR)/$(1)_gsquared$(G)_tmin$(2)_tmax$(3)_dt$(4).json.gz)
+FIX_TARGET  := $(FIX_DIR)/$(1)_tmin$(2)_tmax$(3)_dt$(4).json.gz
 OUTPUTS += $(FIX_TARGET)
 $$(FIX_TARGET): $$(FIX_INPUTS)
 > python $$(FIX_SCRIPT) $$^ --output_filename $$@ 
 endef
 
 define EXT_CONT
-EXT_SCRIPT := ${SRC_DIR}/extrapolate_continuum.py
-EXT_IN_DIR := intermediary_data/beta_interpolation
+EXT_SCRIPT := $(SRC_DIR)/extrapolate_continuum.py
 EXT_TIMES  := $(shell seq $(3) $(5) $(4))
-EXT_INPUTS := $$(foreach T,$$(EXT_TIMES),$$(EXT_IN_DIR)/t$$(T)_$(1).json.gz)
-EXT_TARGET := intermediary_data/continuum_extrapolation/$(1)_gsquared$(2)_tmin$(3)_tmax$(4)_dt$(5).json.gz
+EXT_INPUTS := $$(foreach T,$$(EXT_TIMES),$$(BETA_DIR)/t$$(T)_$(1).json.gz)
+EXT_TARGET := $(CONT_DIR)/$(1)_gsquared$(2)_tmin$(3)_tmax$(4)_dt$(5).json.gz
 OUTPUTS += $(EXT_TARGET)
 $$(EXT_TARGET): $$(EXT_INPUTS)
 > python $$(EXT_SCRIPT) $$^ --output_filename $$@ \
@@ -45,21 +50,19 @@ endef
 
 define INT_FINITE_A
 INT_FIT_ORDER := 4
-INT_SCRIPT := ${SRC_DIR}/fit_beta_against_g2.py
-INT_IN_DIR := intermediary_data/infinite_volume
-INT_INPUTS = $(foreach BETA,$(BETAS),$$(INT_IN_DIR)/b$(BETA)_t$(2)_$(1).json.gz)
-INT_TARGET := intermediary_data/beta_interpolation/t$(2)_$(1).json.gz
+INT_SCRIPT := $(SRC_DIR)/fit_beta_against_g2.py
+INT_INPUTS = $(foreach BETA,$(BETAS),$(VOL_DIR)/b$(BETA)_t$(2)_$(1).json.gz)
+INT_TARGET := $(BETA_DIR)/t$(2)_$(1).json.gz
 OUTPUTS += $(INT_TARGET)
-###$$(info op:$(1) time:$(2) target:$$(INT_TARGET))
 $$(INT_TARGET): $$(INT_INPUTS)
 > python $$(INT_SCRIPT) $$^ --output_filename $$@ \
                             --order $$(INT_FIT_ORDER)           
 endef
 
 define EXT_VOL
-SCRIPT := ${SRC_DIR}/extrapolate_infinite_volume.py
+SCRIPT := $(SRC_DIR)/extrapolate_infinite_volume.py
 INPUTS := $(wildcard raw_data/*b$(1).txt)
-TARGET := intermediary_data/infinite_volume/b$(1)_t$(3)_$(2).json.gz
+TARGET := $(VOL_DIR)/b$(1)_t$(3)_$(2).json.gz
 OUTPUTS += $(TARGET)
 $$(TARGET): $$(INPUTS)
 > python $$(SCRIPT) $$^ --output_filename $$@ \
@@ -70,7 +73,7 @@ endef
 ## PLOTS
 define PLOT_VOL
 PVOL_SCRIPT := $(SRC_DIR)/plot_infinite_volume_extrapolation.py
-PVOL_INPUT  = $(foreach TIME,$(PVOL_TIMES),$(foreach BETA,$(PVOL_BETAS),intermediary_data/infinite_volume/b$(BETA)_t$(TIME)_$(1).json.gz))
+PVOL_INPUT  = $(foreach TIME,$(PVOL_TIMES),$(foreach BETA,$(PVOL_BETAS),$(VOL_DIR)/b$(BETA)_t$(TIME)_$(1).json.gz))
 PVOL_TARGET := assets/volume_extrapolation_$(1).pdf
 $$(PVOL_TARGET): $$(PVOL_INPUT)
 > python $$(PVOL_SCRIPT) $$^ --output_filename $$@ \
@@ -80,9 +83,8 @@ ASSETS += assets/volume_extrapolation_plaq.pdf
 ASSETS += assets/volume_extrapolation_sym.pdf
 
 define PLOT_FINITE_A
-FINA_DIR := intermediary_data/beta_interpolation
 FINA_SCRIPT := $(SRC_DIR)/plot_beta_against_g2.py
-FINA_INPUT  := $(foreach TIME,$(PVOL_TIMES),$$(FINA_DIR)/t$(TIME)_$(1).json.gz)
+FINA_INPUT  := $(foreach TIME,$(PVOL_TIMES),$(BETA_DIR)/t$(TIME)_$(1).json.gz)
 FINA_TARGET := assets/beta_interpolation_finite_a_$(1).pdf
 $$(FINA_TARGET): $$(FINA_INPUT)
 > python $$(FINA_SCRIPT) $$^ --plot_filename $$@ \
@@ -93,20 +95,20 @@ ASSETS += assets/beta_interpolation_finite_a_sym.pdf
 
 # plot fixed point scan
 PFIX_SCRIPT := ${SRC_DIR}/plot_fixed_point_scan.py
-PFIX_INPUT  := $(foreach OP,$(OPS),$(foreach TMIN,$(TMINS),$(foreach TMAX,$(TMAXS),intermediary_data/fixed_point/$(OP)_tmin$(TMIN)_tmax$(TMAX)_dt0.1.json.gz)))
+PFIX_INPUT  := $(foreach OP,$(OPS),$(foreach TMIN,$(TMINS),$(foreach TMAX,$(TMAXS),$(FIX_DIR)/$(OP)_tmin$(TMIN)_tmax$(TMAX)_dt0.1.json.gz)))
 PFIX_TARGET := assets/fixed_point_scan.pdf
 ASSETS += $(PFIX_TARGET)
 
 # plot continuum beta function
 CONTB_SCRIPT := ${SRC_DIR}/plot_beta_against_g2_continuum.py
-CONTB_INPUT  := $(foreach OP,$(OPS),$(foreach G,$(GSQ),intermediary_data/continuum_extrapolation/$(OP)_gsquared$(G)_tmin3.5_tmax6.0_dt0.2.json.gz))
+CONTB_INPUT  := $(foreach OP,$(OPS),$(foreach G,$(GSQ),$(CONT_DIR)/$(OP)_gsquared$(G)_tmin3.5_tmax6.0_dt0.2.json.gz))
 CONTB_TARGET := assets/continuum_betafunction.pdf
 ASSETS += $(CONTB_TARGET)
 
 # plot continuum extrapolation
 PCONT_SCRIPT := $(SRC_DIR)/plot_continuum_extrapolation.py
-PCONT_FIT_DATA := $(foreach OP,$(OPS),$(foreach G,$(PLOT_GSQ),intermediary_data/continuum_extrapolation/$(OP)_gsquared$(G)_tmin3.5_tmax6.0_dt0.2.json.gz))
-PCONT_UNFIT_DATA := $(foreach OP,$(OPS),$(foreach G,$(PLOT_GSQ),intermediary_data/continuum_extrapolation/$(OP)_gsquared$(G)_tmin2.5_tmax6.8_dt0.2.json.gz))
+PCONT_FIT_DATA := $(foreach OP,$(OPS),$(foreach G,$(PLOT_GSQ),$(CONT_DIR)/$(OP)_gsquared$(G)_tmin3.5_tmax6.0_dt0.2.json.gz))
+PCONT_UNFIT_DATA := $(foreach OP,$(OPS),$(foreach G,$(PLOT_GSQ),$(CONT_DIR)/$(OP)_gsquared$(G)_tmin2.5_tmax6.8_dt0.2.json.gz))
 PCONT_TARGET := assets/continuum_extrapolation.pdf
 ASSETS += $(PCONT_TARGET)
 
@@ -128,8 +130,8 @@ all: $(ASSETS)
 
 .PHONY: clean
 clean: 
-> rm intermediary_data/*/*.json.gz
-> rm assets/*
+> rm -rf intermediary_data
+> rm -rf assets
 
 $(PFIX_TARGET): $(PFIX_INPUT)
 > python $(PFIX_SCRIPT) $^ --plot_filename $@ \
