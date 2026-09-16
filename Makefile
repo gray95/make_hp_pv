@@ -10,11 +10,12 @@ VOL_DIR  := intermediary_data/infinite_volume
 $(shell mkdir -p $(BETA_DIR) $(CONT_DIR) $(FIX_DIR) $(VOL_DIR))
 $(shell mkdir -p assets)
 
-BETAS := 920 940 960 980 100 102 104 108 110 114 120 128 136 146
-OPS   := plaq sym
-TIMES       := $(shell seq 2.5 0.1 6.7)
-GSQ         := $(shell seq 1.8 0.1 10.4)
-FIX_GSQ     := $(shell seq 4.5 0.1 8.5)
+LATTSZE := 24 28 32 36 40 
+BETAS   := 920 940 960 980 100 102 104 108 110 114 120 128 136 146
+OPS     := plaq sym
+TIMES   := $(shell seq 2.5 0.1 6.7)
+GSQ     := $(shell seq 1.8 0.1 10.4)
+FIX_GSQ := $(shell seq 4.5 0.1 8.5)
 
 TMINS  := $(shell seq 3 0.1 4)
 TMAXS  := 5.0 5.5 6.0
@@ -25,8 +26,8 @@ PLOT_STYLE = styles/paperdraft.mplstyle
 
 PVOL_BETAS  := 960 980 102
 PVOL_TIMES  := 2.5 3.5 4.5 6.0
-PLOT_GSQ := 2.0 4.0 6.0 8.0
-PLOT_TICKS := 2.0 2.5 3.5 4.5 6.0
+PLOT_GSQ    := 2.0 4.0 6.0 8.0
+PLOT_TICKS  := 2.0 2.5 3.5 4.5 6.0
 
 define FIX_PT
 FIX_SCRIPT  := $(SRC_DIR)/fit_fixed_point.py
@@ -61,10 +62,10 @@ endef
 
 define EXT_VOL
 SCRIPT := $(SRC_DIR)/extrapolate_infinite_volume.py
-INPUTS := $(wildcard raw_data/*b$(1).txt)
+INPUTS := $(foreach L,$(LATTSZE),raw_data/l$(L)t$(L)b$(1).txt)
 TARGET := $(VOL_DIR)/b$(1)_t$(3)_$(2).json.gz
 OUTPUTS += $(TARGET)
-$$(TARGET): $$(INPUTS)
+$$(TARGET): $$(INPUTS) 
 > python $$(SCRIPT) $$^ --output_filename $$@ \
                         --operator $(2)       \
                         --time $(3)
@@ -112,6 +113,8 @@ PCONT_UNFIT_DATA := $(foreach OP,$(OPS),$(foreach G,$(PLOT_GSQ),$(CONT_DIR)/$(OP
 PCONT_TARGET := assets/continuum_extrapolation.pdf
 ASSETS += $(PCONT_TARGET)
 
+all: dload_data .WAIT $(ASSETS)
+
 all:
 $(foreach OP,$(OPS),$(foreach TMIN,$(TMINS),$(foreach TMAX,$(TMAXS),$(eval $(call FIX_PT,$(OP),$(TMIN),$(TMAX),0.1)))))
 $(foreach OP,$(OPS),$(foreach TMIN,$(TMINS2),$(foreach TMAX,$(TMAXS2),$(eval $(call FIX_PT,$(OP),$(TMIN),$(TMAX),0.2)))))
@@ -126,12 +129,16 @@ $(foreach OP,$(OPS),$(foreach TIME,$(TIMES),$(foreach BETA,$(BETAS),$(eval $(cal
 $(foreach OP,$(OPS),$(eval $(call PLOT_VOL,$(OP))))
 $(foreach OP,$(OPS),$(eval $(call PLOT_FINITE_A,$(OP))))
 
-all: $(ASSETS)
+.PHONY: clean dload_data
 
-.PHONY: clean
 clean: 
+> rm -rf raw_data
 > rm -rf intermediary_data
 > rm -rf assets
+
+dload_data:
+> uvx zenodo_get -d 10.5281/zenodo.10719052 -o raw_data
+
 
 $(PFIX_TARGET): $(PFIX_INPUT)
 > python $(PFIX_SCRIPT) $^ --plot_filename $@ \
