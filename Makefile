@@ -129,17 +129,6 @@ $(foreach OP,$(OPS),$(foreach TIME,$(TIMES),$(foreach BETA,$(BETAS),$(eval $(cal
 $(foreach OP,$(OPS),$(eval $(call PLOT_VOL,$(OP))))
 $(foreach OP,$(OPS),$(eval $(call PLOT_FINITE_A,$(OP))))
 
-.PHONY: clean dload_data
-
-clean: 
-> rm -rf raw_data
-> rm -rf intermediary_data
-> rm -rf assets
-
-dload_data:
-> uvx zenodo_get -d 10.5281/zenodo.10719052 -o raw_data
-
-
 $(PFIX_TARGET): $(PFIX_INPUT)
 > python $(PFIX_SCRIPT) $^ --plot_filename $@ \
                            --plot_styles $(PLOT_STYLE)
@@ -154,4 +143,14 @@ $(PCONT_TARGET): $(PCONT_FIT_DATA) $(PCONT_UNFIT_DATA)
                                            --tick_times $(PLOT_TICKS) \
                                            --output_file $@ \
                                            --plot_styles $(PLOT_STYLE)
+.PHONY: clean dload_data
+
+clean: 
+> rm -rf raw_data
+> rm -rf intermediary_data
+> rm -rf assets
+
+dload_data:
+> uvx zenodo_get -d 10.5281/zenodo.10719052 -o raw_data
+
 
